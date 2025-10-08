@@ -1,67 +1,4 @@
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sre-platform-app
-  namespace: production
-  labels:
-    app: sre-platform-app
-    version: v1
-spec:
-  replicas: 3  # Production-grade: multiple replicas for high availability
-  selector:
-    matchLabels:
-      app: sre-platform-app
-  template:
-    metadata:
-      labels:
-        app: sre-platform-app
-        version: v1
-    spec:
-      serviceAccountName: sre-platform-app-sa
-      containers:
-      - name: app
-        image: ghcr.io/your-org/sre-platform-demo:latest
-        ports:
-        - containerPort: 3000
-          name: http
-        env:
-        - name: PORT
-          value: "3000"
-        - name: NODE_ENV
-          value: "production"
-        - name: DATABASE_URL
-          value: "postgresql://postgres:password123@postgres-db.production.svc.cluster.local:5432/sre_platform_db"
-        - name: REDIS_URL
-          value: "redis://redis-cluster.production.svc.cluster.local:6379"
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 3000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 3000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
-          capabilities:
-            drop:
-            - ALL
----
 # PostgreSQL StatefulSet with replication for production-grade database
 apiVersion: apps/v1
 kind: StatefulSet
@@ -72,7 +9,7 @@ metadata:
     app: postgres-db
 spec:
   serviceName: postgres-db
-  replicas: 2  # Production-grade: multiple replicas for high availability
+  replicas: 3  # Production-grade: multiple replicas for high availability
   selector:
     matchLabels:
       app: postgres-db
@@ -158,11 +95,11 @@ spec:
   ports:
   - port: 5432
     targetPort: 5432
+  clusterIP: None  # Use Headless Service for StatefulSet
   selector:
     app: postgres-db
-  type: ClusterIP
 ---
-# Redis for caching with replication
+# Redis Cluster for caching with replication
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -172,7 +109,7 @@ metadata:
     app: redis
 spec:
   serviceName: redis-cluster
-  replicas: 2  # Production-grade: multiple replicas for high availability
+  replicas: 3  # Production-grade: multiple replicas for high availability
   selector:
     matchLabels:
       app: redis
@@ -246,9 +183,9 @@ spec:
   ports:
   - port: 6379
     targetPort: 6379
+  clusterIP: None  # Use Headless Service for StatefulSet
   selector:
     app: redis
-  type: ClusterIP
 ---
 # Redis ConfigMap
 apiVersion: v1
@@ -279,6 +216,71 @@ data:
   username: cG9zdGdyZXM=  # base64 encoded 'postgres'
   password: cGFzc3dvcmQxMjM=  # base64 encoded 'password123'
 ---
+# Update the main application deployment to connect to the database
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sre-platform-app
+  namespace: production
+  labels:
+    app: sre-platform-app
+    version: v1
+spec:
+  replicas: 3  # Production-grade: multiple replicas for high availability
+  selector:
+    matchLabels:
+      app: sre-platform-app
+  template:
+    metadata:
+      labels:
+        app: sre-platform-app
+        version: v1
+    spec:
+      serviceAccountName: sre-platform-app-sa
+      containers:
+      - name: app
+        image: ghcr.io/your-org/sre-platform-demo:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: NODE_ENV
+          value: "production"
+        - name: DATABASE_URL
+          value: "postgresql://postgres:password123@postgres-db-0.postgres-db.production.svc.cluster.local:5432/sre_platform_db"
+        - name: REDIS_URL
+          value: "redis://redis-cluster-0.redis-cluster.production.svc.cluster.local:6379"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+---
+# Update the main service to maintain consistency
 apiVersion: v1
 kind: Service
 metadata:

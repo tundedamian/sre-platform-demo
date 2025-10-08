@@ -95,6 +95,18 @@ cd ../application
 
 # Build and tag container image
 docker build -t sre-platform-app:latest .
+```
+
+### 2. CI/CD Connection to Application Servers
+
+The CI/CD pipeline automates the entire process from code commit to running on application servers:
+
+- **Container Registry Integration**: Built container images are automatically pushed to GHCR (GitHub Container Registry)
+- **Kubernetes Deployment**: CI/CD pipeline uses kubectl to deploy new images directly to Kubernetes application servers
+- **Zero-Downtime Deployment**: Rolling updates ensure application servers continue serving requests during deployments
+- **Configuration Management**: CI/CD pipeline manages ConfigMaps and Secrets for application servers
+- **Health Validation**: Automated health checks verify that application servers are running correctly after deployment
+- **Rollback Mechanism**: If application servers fail health checks, CI/CD automatically reverts to the previous stable version
 
 # Tag for your container registry
 docker tag sre-platform-app:latest <your-registry>/sre-platform-app:latest
@@ -154,22 +166,39 @@ kubectl apply -f monitoring/service-monitors/
 
 ### 1. GitHub Actions Configuration
 
-The repository includes GitHub Actions workflows in `.github/workflows/`:
+The repository includes GitHub Actions workflows in `.github/workflows/` that establish a clear path for code to move from development into production:
 
-- `ci.yml`: Runs tests and builds container images
-- `cd.yml`: Deploys to Kubernetes cluster (requires secrets)
-- `security-scan.yml`: Performs security scanning
+- `ci-cd.yml`: Comprehensive CI/CD pipeline that builds, tests, packages, and deploys applications to Kubernetes clusters
+  - **Continuous Integration Phase**: Automated testing and building of container images when code is pushed
+  - **Deployment Phase**: Automated deployment to staging and production environments based on branch
+  - **Security Scanning**: Integration with security tools to catch vulnerabilities early
+  - **Notification System**: Alerts for successful deployments or failures
 
-### 2. Required GitHub Secrets
+### 2. How Code Moves Into Production
 
-Add these secrets to your GitHub repository:
+The CI/CD pipeline creates a clear, automated flow for code to move from development into production:
+
+1. **Code Commit**: Developer commits code to repository (typically to feature branches)
+2. **Pull Request**: Code is reviewed and merged to `develop` branch for initial testing
+3. **Merge to Main**: When ready for production, code is merged to `main` branch
+4. **Build Phase**: Container image is automatically built with the latest code
+5. **Test Phase**: Automated tests run to validate functionality and security
+6. **Container Registry**: Successfully built images are pushed to container registry (GHCR)
+7. **Staging Deployment**: Image is deployed to staging environment for validation
+8. **Production Deployment**: After staging validation, image is deployed to production environment
+9. **Health Monitoring**: Automated health checks ensure service stability
+10. **Rollback Capability**: Automated rollback mechanisms if health checks fail
+
+### 3. Required GitHub Secrets
+
+Add these secrets to your GitHub repository to enable secure deployment to application servers:
 
 ```
 AWS_ACCESS_KEY_ID: [Your AWS Access Key]
 AWS_SECRET_ACCESS_KEY: [Your AWS Secret Key]
 DOCKER_USERNAME: [Your Docker Hub Username]
 DOCKER_PASSWORD: [Your Docker Hub Password]
-KUBE_CONFIG_DATA: [Base64 encoded kubeconfig file]
+KUBE_CONFIG_DATA: [Base64 encoded kubeconfig file for production cluster access]
 ```
 
 ## Configuration Management
